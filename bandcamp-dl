@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+##!/home/dustin/.rvm/rubies/ruby-2.3.1/bin/ruby
+
+require 'curb'
+require 'nokogiri'
+
+targetdir = Dir.pwd
+url = ARGV[0]
+yta = 'youtube-dl --no-mtime -o "%(autonumber)s-%(title)s.%(ext)s"'
+unless url.match(/^(http|https):\/\/[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/ix)
+  puts "Url is invalid!"
+  raise ArgumentError 
+end
+domain = url.split("/")[2].split('.')[0..2].join(".")
+puts "Got domain: #{domain}"
+
+puts "Saving into #{targetdir}..."
+result = Curl.get(url)
+noko = Nokogiri::HTML.parse(result.body_str)
+bandcampalbums = noko.css("a[href*='bandcamp.com/album'], a[href^='/album/']").map{|x|x.attr('href')}.uniq.map{|y| y.match(/^\//) ? "http://#{domain}#{y}" : y }.map{|x| [x, x.split("/").last.gsub('-',' ') ]}
+bandcampalbums.each do |al|
+  puts "Downloading \"#{al.last}\" (#{al.first})..."
+  newtarget = "#{targetdir}/#{al.last}"
+  puts "  into #{newtarget} ..."
+  puts "COMMAND: #{yta} \"#{al.first}\""
+  `mkdir -p "#{newtarget}"; cd "#{newtarget}"; #{yta} "#{al.first}"; cd "#{targetdir}"` 
+end
+
+puts bandcampalbums.inspect
+
+
+
