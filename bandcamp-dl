@@ -1,8 +1,10 @@
+
 #!/usr/bin/env ruby
 ##!/home/dustin/.rvm/rubies/ruby-2.3.1/bin/ruby
 
 require 'curb'
 require 'nokogiri'
+require 'ostruct'
 
 targetdir = Dir.pwd
 url = ARGV[0]
@@ -15,18 +17,45 @@ domain = url.split("/")[2].split('.')[0..2].join(".")
 puts "Got domain: #{domain}"
 
 puts "Saving into #{targetdir}..."
+
+def friendly(str)
+  str.gsub(/[^a-zA-Z0-9'()",_ -]/,'')
+end
+
+def dedash(str)
+  str.gsub('-','')
+end
+
 result = Curl.get(url)
 noko = Nokogiri::HTML.parse(result.body_str)
-bandcampalbums = noko.css("a[href*='bandcamp.com/album'], a[href^='/album/']").map{|x|x.attr('href')}.uniq.map{|y| y.match(/^\//) ? "http://#{domain}#{y}" : y }.map{|x| [x, x.split("/").last.gsub('-',' ') ]}
-bandcampalbums.each do |al|
-  puts "Downloading \"#{al.last}\" (#{al.first})..."
-  newtarget = "#{targetdir}/#{al.last}"
+bandcamplinks = noko.css("a[href*='bandcamp.com/album'], a[href^='/album/']")
+bandcampalbums = bandcamplinks.map do |l|
+  obj = OpenStruct.new
+  obj.href = l.attr('href')
+  obj.goodhref = obj.href.match(/^\//) ? "http://#{domain}#{obj.href}" : obj.href 
+  artistelem = l.css(".artist-override").first
+  obj.artist = artistelem ? friendly(artistelem.inner_text.to_s.strip) : ""
+  begin
+    obj.album = friendly(l.css("p").first.children.select{|x|x.is_a? Nokogiri::XML::Text}.map(&:inner_text).join.strip)
+  rescue => e
+          puts e.message
+          puts e.backtrace
+    obj.album = friendly(dedash(obj.goodhref.split('/').last))
+  end
+  obj.folderpath = obj.artist.empty? ? obj.album : obj.artist + ' - ' + obj.album
+  obj
+end
+
+bandcampalbums.each do |obj|
+  puts "Downloading \"#{obj.album}\" (#{obj.goodhref})..."
+  puts "Artist: #{ obj.artist.empty? ? "(artist is blank)" : obj.artist }"
+
+  newtarget = "#{targetdir}/#{obj.folderpath}"
   puts "  into #{newtarget} ..."
-  puts "COMMAND: #{yta} \"#{al.first}\""
-  `mkdir -p "#{newtarget}"; cd "#{newtarget}"; #{yta} "#{al.first}"; cd "#{targetdir}"` 
+  puts "COMMAND: #{yta} \"#{obj.goodhref}\""
+  `mkdir -p "#{newtarget}"; cd "#{newtarget}"; #{yta} "#{obj.goodhref}"; cd "#{targetdir}"` 
 end
 
 puts bandcampalbums.inspect
-
 
 
