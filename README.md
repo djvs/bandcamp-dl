@@ -1,4 +1,4 @@
-### bandcamp-dl
+## bandcamp-dl
 
 Wrapper around `youtube-dl` for yanking an artist's discography off of Bandcamp.
 
@@ -9,7 +9,7 @@ bandcamp-dl https://someartist.bandcamp.com/album/whatever
 
 Will automatically search for links to an artist's discography page and then download each album individually, prefixing the album's name with an artist's name on multi-artist discography pages.  
 
-## Requirements
+### Requirements
 
 * youtube-dl
 * A recent version of ruby
