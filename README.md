@@ -12,7 +12,7 @@ Will automatically search for links to an artist's discography page and then dow
 ### Requirements
 
 * youtube-dl
-* A recent version of ruby
+* A semi-recent version of Ruby (honestly it probably even works with Ruby v1.9.2 or so, haven't tested it tho)
 * Ruby gems:
   * curb
   * nokogiri
