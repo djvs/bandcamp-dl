@@ -5,6 +5,8 @@ require 'nokogiri'
 require 'ostruct'
 require 'pry'
 require 'securerandom'
+require 'json'
+require 'time'
 
 def friendly(str)
   str.gsub(/[^a-zA-Z0-9'()",_ -]/,'').gsub('  ',' ')
@@ -22,14 +24,17 @@ def getnoko(curl_res)
   Nokogiri::HTML.parse(curl_res.body_str)
 end
 
-def log_error(err)
+def log_error(e)
   puts e.message
   puts e.backtrace
 end
 
 targetdir = Dir.pwd
-url = ARGV[0]
-yta = 'youtube-dl --no-mtime -o "%(autonumber)s-%(title)s.%(ext)s" -f "mp3/mp3-320/mp3-v0/m4a/vorbis/aac/mp3-128/flac/alac/aiff-lossless/wav"'
+url = ARGV.select{|x|x.include?("http")}[0].gsub("http://","https://")
+
+#yta = 'youtube-dl --no-mtime -o "%(autonumber)s-%(title)s.%(ext)s" -f "mp3/mp3-320/mp3-v0/m4a/vorbis/aac/mp3-128/flac/alac/aiff-lossless/wav"'
+yta = "bandcamp-mp3-dl" 
+
 unless url.match(/^(http|https):\/\/[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/ix)
   puts "URL is invalid!"
   raise ArgumentError 
@@ -46,7 +51,10 @@ grid = noko.css('.music-grid')
 if grid.empty?
   begin
     puts "Not a discography page, looking for that one to open..."
-    link_to_discog = gethref(noko.css("a[href*='/music']")[0]['href'], domain)
+    possible_discog_link_elems = noko.css("a[href*='/music']")
+    discog_link_elem = possible_discog_link_elems.find{|x| x['href'].match?(/music$/)}
+    link_to_discog = gethref(discog_link_elem['href'], domain)
+    #binding.pry
     result = Curl.get(link_to_discog)
     noko = getnoko(result)
   rescue => e
@@ -58,6 +66,20 @@ end
 
 def get_album_links(elems)
   elems.map{|x|x.css("a[href*='bandcamp.com/album'], a[href^='/album/'], a[href^='/track/'], a[href*='bandcamp.com/track']")}.flatten
+end
+
+def get_album_manifest(albumhref)
+  albumnoko = getnoko(Curl.get(albumhref))
+  # scriptelems = albumnoko.css("script").select{|x|x.inner_html.include?("numberOfItems")}
+  scriptelems = albumnoko.css("script").select{|x|x['type'] == "application/ld+json"}
+  puts albumhref.inspect
+  binding.pry unless scriptelems[0]
+  albummanifest = JSON.parse(scriptelems[0].inner_html)
+  return albummanifest
+end
+
+def get_album_year(albummanifest)
+  return Time.parse(albummanifest['datePublished']).year  
 end
 
 def get_album_name(l)
@@ -73,15 +95,27 @@ albumlinks = get_album_links(noko.css('.music-grid'))
 albums = albumlinks.map do |l|
   a = OpenStruct.new
   a.href = gethref(l.attr('href'), domain)
+  #binding.pry
   artistelem = l.css(".artist-override").first
+  if ARGV.include?('--years')
+    puts "Retrieving album metadata..."
+    albummanifest = get_album_manifest(a.href)
+    albumyear = get_album_year(albummanifest)
+    str = "#{albumyear} - "
+    "Got album metadata - year is #{albumyear}"
+  else
+    str = ""
+  end
   a.artist = artistelem ? friendly(artistelem.inner_text.to_s.strip) : false
   a.album = friendly(dedash(get_album_name(l)))
-  a.folderpath = a.artist ? "#{a.artist} - #{a.album}" : a.album
+  a.folderpath = (str + (a.artist ? "#{a.artist} - #{a.album}" : a.album))
+  puts "a.folderpath: #{a.folderpath}"
   a
 end
 
 puts "Albums:"
-  puts 
+puts 
+
 albums.each do |a|
   puts "Artist: #{a.artist}"
   puts "Album: #{a.album}"
@@ -90,18 +124,22 @@ albums.each do |a|
   puts 
 end
 
-binding.pry
+#binding.pry
 
 albums.each do |a|
   next if a.nil?
 
-  newtarget = "#{targetdir}/#{a.folderpath}"
+  newtarget = Shellwords.escape "#{targetdir}/#{a.folderpath}"
 
   puts "Downloading #{a.to_h.to_a.inspect}"
   puts "  into #{newtarget} ..."
   puts "  executing...\t #{yta} \"#{a.href}\""
-  `mkdir -p "#{newtarget}"; cd "#{newtarget}"; #{yta} "#{a.href}"; cd "#{targetdir}"` 
-  puts
+  next if ARGV.include?("--nodl")
+  puts `mkdir -p #{newtarget};`
+  #str = "cd \"#{newtarget}\"; #{yta} \"#{a.href}\"; cd \"#{targetdir}\"" 
+  puts `cd #{newtarget}; #{yta} "#{a.href}"; cd #{Shellwords.escape targetdir}` 
+  #puts str
+  #puts "cd " + newtarget
 end
 
 puts albums.inspect

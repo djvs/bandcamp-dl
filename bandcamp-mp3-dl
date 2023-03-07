@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+require 'curb'
+require 'nokogiri'
+require 'ostruct'
+require 'pry'
+require 'securerandom'
+require 'json'
+require 'taglib'
+require 'time'
+require 'zaru'
+
+def getnoko(curl_res)
+  Nokogiri::HTML.parse(curl_res.body_str)
+end
+
+def gethref(str, domain)
+  str.match(/^\//) ? "https://#{domain}#{str}" : str
+end
+
+url = ARGV[0].gsub("http://","https://")
+
+puts url.inspect
+
+page = getnoko(Curl.get(url))
+
+
+mp3script = page.css('script').select{|x|
+  h = x.to_html;
+  h.include?('bcbits.com') && h.include?('data-tralbum')
+}
+
+tralbum = mp3script[0].attr('data-tralbum')
+if !tralbum
+  tralbum = mp3script[0].inner_text
+end
+
+manifest = JSON.parse(tralbum)
+
+album = manifest['current']['title']
+time = Time.parse(manifest['current']['release_date'])
+
+tracks = manifest['trackinfo']
+
+list = tracks.each_with_index do |x, i|
+  next unless x['file']
+
+  title = x['title']
+  url = x['file']['mp3-128']
+  trackNum = i + 1
+  #filepath = trackNum.to_s.rjust(2, "0") + " - " + title.gsub(/[^,?a-zA-Z0-9 _'"-]/, '') + ".mp3"
+  filepath = trackNum.to_s.rjust(2, "0") + " - " + Zaru.sanitize!(title) + ".mp3"
+
+  puts "Downloading #{title} to #{filepath} from #{url} ..."
+
+  Curl::Easy.download(url, filepath)
+  
+  # Tag
+  tag = TagLib::FileRef.open(filepath) do |file|
+    unless file.null?
+      tag = file.tag
+      tag.title = title
+      tag.artist = manifest['artist']
+      tag.album = album
+      tag.track = trackNum
+      tag.year = time.year
+      file.save
+    end
+  end
+end
