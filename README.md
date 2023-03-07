@@ -20,8 +20,8 @@ Please use responsibly and support artists you think deserve it!
 ```
 cd /tmp
 wget https://github.com/djvs/bandcamp-dl/blob/master/bandcamp-dl
-sudo cp bandcamp-dl /usr/bin/
-sudo chmod +x /usr/bin/bandcamp-dl
+sudo cp bandcamp-dl bandcamp-mp3-dl /usr/bin/
+sudo chmod +x /usr/bin/bandcamp-dl /usr/bin/bandcamp-mp3-dl
 ```
 
 ### Usage
